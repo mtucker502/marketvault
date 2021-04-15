@@ -1,0 +1,4 @@
+providers:
+  coinbase:
+    API_KEY: my_secret_key
+    enabled: True
