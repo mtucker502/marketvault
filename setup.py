@@ -17,6 +17,7 @@ setup(
         "pydantic==1.8.1",
         "PyYAML==5.4.1",
         "typing-extensions==3.7.4.3",
+        "multiprocessing-logging==0.3.1",
     ],
     extras_require={
         "dev": ["black", "flake8"]
