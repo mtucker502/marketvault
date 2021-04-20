@@ -1,71 +1,75 @@
 from .plugins import pm
 from .settings import settings
-from concurrent.futures import ProcessPoolExecutor
-import logging
-from logging import handlers
-import multiprocessing_logging
-
 import multiprocessing
-multiprocessing.set_start_method('fork')  # Update default for OSX.
+import logging
+import logging.handlers
+import logging.config
+import threading
+from .log import logger_thread, LOGGING_CONFIG
+import multiprocessing as mp
 
-logger = logging.getLogger(__name__)
 
 class MarketVault:
     def __init__(self):
         self.settings = settings
         self.setup_logging()
-        multiprocessing_logging.install_mp_handler()
 
-        self.providers = {}
         self.pm = pm
-
-        self.executor = ProcessPoolExecutor(self.settings.get('max_workers'))
+        # self.executor = ProcessPoolExecutor(self.settings.get('max_workers'))
+        self.pool = mp.Pool()
+        self.workers = []
         self.load_providers()
 
-        #FIXME: Need method to watch health of provider plugins
+        # TODO: Monitor health of workers
+
+    def shutdown(self):
+        # Stop the logging thread
+        self.log_queue.put(None)
+        self.lt.join()
+
+        # TODO: Providers
+        # TODO: SHUTDOWN PROVIDERS
 
     def load_providers(self):
-        self.logger.info("Loading provider settings")
-        # We only load plugin providers for which we have configuration
-        # If providers configuration is not present, just exit
-        if not self.settings.get("providers"):
-            self.logger.warning("No provider configuration found!")
-            return None
+        """Providers will run as a subprocess. Other plugins may be treated as threads or called in separately"""
 
         _PROVIDER_PREFIX = "provider_"
+
+        self.logger.debug("Loading providers")
+        self.providers = {}
+
+        # If providers configuration is not present, just exit
+        if not self.settings.get("providers"):
+            self.logger.info("No provider configuration found!")
+            return None
+
         for name, entrypoint in self.pm.plugins.items():
+            self.logger.debug(f"Found plugin {name} at {entrypoint.module_name}")
+
             provider_name = name.split(_PROVIDER_PREFIX)[1]
             provider_settings = self.settings["providers"].get(provider_name)
 
-
+            # We only load plugin providers for which we have configuration
             if name.startswith(_PROVIDER_PREFIX) and provider_settings:
+                provider_name = name.split(_PROVIDER_PREFIX)[1]
                 provider = entrypoint.load()
-                self.providers[provider_name] = dict(
-                    entrypoint = provider,
-                    futures = self.executor.submit(provider.run, provider_settings),
+                worker = mp.Process(
+                    target=provider.run,
+                    args=(settings,),
+                    kwargs=dict(queue=self.log_queue),
                 )
-                # provider#.Provider(provider_settings)
-                # self.executor.submit(provider.module_name + ".run", provider_settings)
-                # # self.providers[provider_name] = provider.Provider(provider_settings)
-                # self.providers[provider_name] = provider#.Provider(provider_settings)
-        
-        #FIXME: Log on providers that are configured but not installed, (WARNING)
-        #FIXME: Log providers that are installed but not configured (INFO)
-    
+                self.workers.append(worker)
+                worker.start()
+
+        # FIXME: Log on providers that are configured but not installed, (WARNING)
+        # FIXME: Log providers that are installed but not configured (INFO)
+
     def setup_logging(self):
-        self.logger = logger
-        self.logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
-        #FIXME: Change log level based on settings
-        # File Handler
-        fh = handlers.RotatingFileHandler(self.settings.get('log_file', 'test.log'), maxBytes=1000000, backupCount=3)
-        fh.setFormatter(formatter)
-        self.logger.addHandler(fh)
-
-        # Console Output
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        self.logger.addHandler(ch)
-
-    # FIXME: Updates to database should also update websocket IF websocket is active and there are subscribers
+        logging.config.dictConfig(LOGGING_CONFIG)
+        self.log_queue = multiprocessing.Manager().Queue(-1)
+        self.lt = threading.Thread(target=logger_thread, args=(self.log_queue,))
+        self.lt.start()
+        self.logger = logging.getLogger(__name__)
+        logging.info("root test")
+        self.logger.info("main test")
