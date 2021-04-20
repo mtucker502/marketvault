@@ -71,5 +71,3 @@ class MarketVault:
         self.lt = threading.Thread(target=logger_thread, args=(self.log_queue,))
         self.lt.start()
         self.logger = logging.getLogger(__name__)
-        logging.info("root test")
-        self.logger.info("main test")

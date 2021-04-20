@@ -35,7 +35,6 @@ LOGGING_CONFIG = {
 
 
 def logger_thread(q):
-    # log_configurer(q)
     while True:
         record = q.get()
         if record is None:
@@ -50,22 +49,3 @@ def install_q_logger(q):
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
     root.addHandler(qh)
-
-
-# if __name__ == '__main__':
-#     q = Queue()
-
-#     for i in range(5):
-#         wp = Process(target=worker_process, name='worker %d' % (i + 1), args=(q,))
-#         workers.append(wp)
-#         wp.start()
-#     logging.config.dictConfig(d)
-#     lp = threading.Thread(target=logger_thread, args=(q,))
-#     lp.start()
-#     # At this point, the main process could do some useful work of its own
-#     # Once it's done that, it can wait for the workers to terminate...
-#     for wp in workers:
-#         wp.join()
-#     # And now tell the logging thread to finish up, too
-#     q.put(None)
-#     lp.join()
